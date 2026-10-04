@@ -1,78 +1,119 @@
 package com.project;
 
-// Importació de CompletableFuture per gestionar tasques asíncrones en cadena
-import java.util.concurrent.CompletableFuture;
+// Importacions necessàries per a la concurrència i càlculs
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class Main {
 
+    // Variables globals per emmagatzemar els resultats dels càlculs en paral·lel
+    private static double resultatSuma = 0;
+    private static double resultatMitjana = 0;
+    private static double resultatDesviacio = 0;
+
     public static void main(String[] args) {
-        
-        System.out.println("[Fil Principal] Iniciant el procés de la sol·licitud web de forma asíncrona...\n");
+        // Conjunt gran de dades simuladat per fer els càlculs
+        double[] dades = {10.0, 12.0, 23.0, 23.0, 16.0, 23.0, 21.0, 16.0};
 
-        // ENCADENAMENT ASÍNCRON AMB COMPLETABLEFUTURE
-        // Iniciem una cadena on cada baula s'executarà quan finalitzi l'anterior sense bloquejar el fil principal.
-        CompletableFuture<Void> cadenaAsincrona = CompletableFuture
-                
-                // =======================================================================
-                // ETAPA 1 (supplyAsync): Validació de les dades d'entrada
-                // Executa una tasca asíncrona que RETORNA un valor inicial (un String).
-                // =======================================================================
-                .supplyAsync(() -> {
-                    try {
-                        System.out.println("[" + Thread.currentThread().getName() + "] Etapa 1: Validant les dades de la sol·licitud...");
-                        Thread.sleep(1200); // Simula el temps que triga a comprovar les dades a la base de dades
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    System.out.println("[" + Thread.currentThread().getName() + "] Etapa 1: Dades validades correctament.");
-                    return "usuari_web_pro"; // Retorna el valor inicial que passarà a la següent etapa
-                })
+        // CREACIÓ DE LA CYCLICBARRIER
+        // Inicialitzem la barrera per a 3 hilos (les 3 tasques en paral·lel).
+        // El segon paràmetre és un Runnable (acció de barrera) que s'executarà 
+        // AUTOMÀTICAMENT quan l'últim dels 3 fils arribi a la barrera.
+        CyclicBarrier barrera = new CyclicBarrier(3, () -> {
+            // Aquest bloc només s'executa quan les 3 tasques han fet el seu .await()
+            System.out.println("\n=========================================");
+            System.out.println("   RESULTATS FINALS (Sincronitzats)      ");
+            System.out.println("=========================================");
+            System.out.printf("1. Suma Total:          %.2f\n", resultatSuma);
+            System.out.printf("2. Mitjana Aritmètica:  %.2f\n", resultatMitjana);
+            System.out.printf("3. Desviació Estàndard: %.2f\n", resultatDesviacio);
+            System.out.println("=========================================");
+        });
 
-                // =======================================================================
-                // ETAPA 2 (thenApply): Processament i càlcul de les dades
-                // Rep el resultat de l'etapa anterior, el MODIFICA i en retorna un de nou.
-                // =======================================================================
-                .thenApply((nomUsuari) -> {
-                    try {
-                        System.out.println("[" + Thread.currentThread().getName() + "] Etapa 2: Processant dades i calculant resultats per a: " + nomUsuari);
-                        Thread.sleep(1000); // Simula un càlcul complex de lògica de negoci
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    String resultatCalculat = "Token_Generat_Per_" + nomUsuari.toUpperCase();
-                    System.out.println("[" + Thread.currentThread().getName() + "] Etapa 2: Càlcul finalitzat.");
-                    return resultatCalculat; // Retorna el text modificat a la següent etapa
-                })
+        // TASCA 1 (Runnable): Càlcul de la Suma
+        Runnable tascaSuma = () -> {
+            System.out.println("[" + Thread.currentThread().getName() + "] Iniciant càlcul de la Suma...");
+            double suma = 0;
+            for (double d : dades) {
+                suma += d;
+            }
+            resultatSuma = suma; // Guardem el resultat
+            System.out.println("[" + Thread.currentThread().getName() + "] Suma calculada. Esperant a la barrera...");
+            
+            try {
+                barrera.await(); // El fil es queda aquí fins que els altres 2 arribin
+            } catch (Exception e) {
+                System.err.println("Error a la barrera: " + e.getMessage());
+            }
+        };
 
-                // =======================================================================
-                // ETAPA 3 (thenAccept): Mostrar la resposta final al client
-                // Rep el resultat de l'etapa anterior (Etapa 2), el CONSUMEIX i no retorna res (Void).
-                // =======================================================================
-                .thenAccept((resultatFinal) -> {
-                    try {
-                        System.out.println("[" + Thread.currentThread().getName() + "] Etapa 3: Preparant la resposta HTTP final...");
-                        Thread.sleep(800); // Simula la renderització o enviament de la pàgina web
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    // Simulem la presentació final de la resposta enviada a l'usuari
-                    System.out.println("\n--- RESPOSTA ENVIADA A L'USUARI ---");
-                    System.out.println("Sol·licitud processada correctament. Resposta del sistema: " + resultatFinal);
-                    System.out.println("-----------------------------------");
-                });
+        // TASCA 2 (Runnable): Càlcul de la Mitjana
+        Runnable tascaMitjana = () -> {
+            System.out.println("[" + Thread.currentThread().getName() + "] Iniciant càlcul de la Mitjana...");
+            double suma = 0;
+            for (double d : dades) {
+                suma += d;
+            }
+            resultatMitjana = suma / dades.length; // Guardem el resultat
+            System.out.println("[" + Thread.currentThread().getName() + "] Mitjana calculada. Esperant a la barrera...");
+            
+            try {
+                barrera.await(); // El fil es queda aquí fins que els altres 2 arribin
+            } catch (Exception e) {
+                System.err.println("Error a la barrera: " + e.getMessage());
+            }
+        };
 
-        // FIL PRINCIPAL DISPONIBLE
-        // Com que la cadena és totalment asíncrona i no bloquejant, el fil 'main' pot continuar 
-        // executant altres instruccions immediatament mentre les etapes es fan en segon pla.
-        System.out.println("[Fil Principal] La cadena asíncrona s'està executant en segon pla. Jo no estic bloquejat!");
-        System.out.println("[Fil Principal] Fent altres tasques del sistema...\n");
+        // TASCA 3 (Runnable): Càlcul de la Desviació Estàndard
+        Runnable tascaDesviacio = () -> {
+            System.out.println("[" + Thread.currentThread().getName() + "] Càlcul de la Desviació Estàndard...");
+            
+            // Primer necessitem la mitjana per a la fórmula de la desviació
+            double suma = 0;
+            for (double d : dades) {
+                suma += d;
+            }
+            double mitjana = suma / dades.length;
+            
+            // Càlcul de la variància
+            double sumaDiferenciesQuadrat = 0;
+            for (double d : dades) {
+                sumaDiferenciesQuadrat += Math.pow(d - mitjana, 2);
+            }
+            double variancia = sumaDiferenciesQuadrat / dades.length;
+            
+            // La desviació estàndard és la arrel quadrada de la variància
+            resultatDesviacio = Math.sqrt(variancia);
+            System.out.println("[" + Thread.currentThread().getName() + "] Desviació calculada. Esperant a la barrera...");
+            
+            try {
+                barrera.await(); // El fil es queda aquí fins que els altres 2 arribin
+            } catch (Exception e) {
+                System.err.println("Error a la barrera: " + e.getMessage());
+            }
+        };
 
-        // ESPERA FINAL (join)
-        // Requisit: Usem join() per forçar el fil principal a esperar que TOTA la cadena asíncrona 
-        // es completi. Si no poséssim aquesta línia, el programa finalitzaria abans que les tasques 
-        // en segon pla acabessin de mostrar els resultats per pantalla.
-        cadenaAsincrona.join();
+        // MOTOR D'EXECUCIÓ (POOL DE FILS)
+        // Creem un pool de fils fix per executar les 3 tasques en paral·lel
+        ExecutorService executor = Executors.newFixedThreadPool(3);
 
-        System.out.println("\n[Fil Principal] Totes les operacions asíncrones han acabat. Tancant l'aplicació web.");
+        // Enviem les tasques a l'executor per a la seva execució simultània
+        executor.execute(tascaSuma);
+        executor.execute(tascaMitjana);
+        executor.execute(tascaDesviacio);
+
+        // TANCAMENT CONTROLAT DE L'EXECUTOR
+        // Tanquem l'executor perquè no accepti més tasques i alliberi la memòria
+        executor.shutdown();
+        try {
+            // Esperem un màxim de 5 segons a que tots els fils hagin creuat la barrera i acabat
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+        }
     }
 }
