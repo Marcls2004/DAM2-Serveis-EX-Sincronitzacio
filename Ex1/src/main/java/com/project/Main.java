@@ -1,119 +1,97 @@
 package com.project;
 
-// Importacions necessàries per a la concurrència i càlculs
-import java.util.concurrent.CyclicBarrier;
+// Importaciones necesarias para hilos, pools y semáforos
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 public class Main {
 
-    // Variables globals per emmagatzemar els resultats dels càlculs en paral·lel
-    private static double resultatSuma = 0;
-    private static double resultatMitjana = 0;
-    private static double resultatDesviacio = 0;
-
     public static void main(String[] args) {
-        // Conjunt gran de dades simuladat per fer els càlculs
-        double[] dades = {10.0, 12.0, 23.0, 23.0, 16.0, 23.0, 21.0, 16.0};
+        // Creamos un aparcamiento con una capacidad limitada de 3 plazas
+        ParkingLot parking = new ParkingLot(3);
 
-        // CREACIÓ DE LA CYCLICBARRIER
-        // Inicialitzem la barrera per a 3 hilos (les 3 tasques en paral·lel).
-        // El segon paràmetre és un Runnable (acció de barrera) que s'executarà 
-        // AUTOMÀTICAMENT quan l'últim dels 3 fils arribi a la barrera.
-        CyclicBarrier barrera = new CyclicBarrier(3, () -> {
-            // Aquest bloc només s'executa quan les 3 tasques han fet el seu .await()
-            System.out.println("\n=========================================");
-            System.out.println("   RESULTATS FINALS (Sincronitzats)      ");
-            System.out.println("=========================================");
-            System.out.printf("1. Suma Total:          %.2f\n", resultatSuma);
-            System.out.printf("2. Mitjana Aritmètica:  %.2f\n", resultatMitjana);
-            System.out.printf("3. Desviació Estàndard: %.2f\n", resultatDesviacio);
-            System.out.println("=========================================");
-        });
+        // MOTOR DE EJECUCIÓN (POOL DE HILOS)
+        // Usamos un pool de 6 hilos para simular la llegada simultánea de 6 coches
+        ExecutorService executor = Executors.newFixedThreadPool(6);
 
-        // TASCA 1 (Runnable): Càlcul de la Suma
-        Runnable tascaSuma = () -> {
-            System.out.println("[" + Thread.currentThread().getName() + "] Iniciant càlcul de la Suma...");
-            double suma = 0;
-            for (double d : dades) {
-                suma += d;
-            }
-            resultatSuma = suma; // Guardem el resultat
-            System.out.println("[" + Thread.currentThread().getName() + "] Suma calculada. Esperant a la barrera...");
+        System.out.println("[SISTEMA] Apertura del aparcamiento. Plazas totales: 3\n");
+
+        // Creamos y lanzamos 6 tareas concurrentes (una para cada coche)
+        for (int i = 1; i <= 6; i++) {
+            final int cocheId = i;
             
-            try {
-                barrera.await(); // El fil es queda aquí fins que els altres 2 arribin
-            } catch (Exception e) {
-                System.err.println("Error a la barrera: " + e.getMessage());
-            }
-        };
+            // Definimos la tarea Runnable que simula el ciclo de vida del coche
+            Runnable tascaCotxe = () -> {
+                try {
+                    // El coche intenta acceder al aparcamiento
+                    parking.entrar(cocheId);
+                    
+                    // Simula el tiempo que el coche pasa aparcado dentro (entre 1 y 3 segundos)
+                    long tempsAparcat = (long) (Math.random() * 2000 + 1000);
+                    Thread.sleep(tempsAparcat);
+                    
+                    // El coche abandona el aparcamiento liberando su sitio
+                    parking.sortir(cocheId);
+                    
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            };
 
-        // TASCA 2 (Runnable): Càlcul de la Mitjana
-        Runnable tascaMitjana = () -> {
-            System.out.println("[" + Thread.currentThread().getName() + "] Iniciant càlcul de la Mitjana...");
-            double suma = 0;
-            for (double d : dades) {
-                suma += d;
-            }
-            resultatMitjana = suma / dades.length; // Guardem el resultat
-            System.out.println("[" + Thread.currentThread().getName() + "] Mitjana calculada. Esperant a la barrera...");
-            
-            try {
-                barrera.await(); // El fil es queda aquí fins que els altres 2 arribin
-            } catch (Exception e) {
-                System.err.println("Error a la barrera: " + e.getMessage());
-            }
-        };
+            // Enviamos el coche al pool para que actúe de forma concurrente
+            executor.execute(tascaCotxe);
+        }
 
-        // TASCA 3 (Runnable): Càlcul de la Desviació Estàndard
-        Runnable tascaDesviacio = () -> {
-            System.out.println("[" + Thread.currentThread().getName() + "] Càlcul de la Desviació Estàndard...");
-            
-            // Primer necessitem la mitjana per a la fórmula de la desviació
-            double suma = 0;
-            for (double d : dades) {
-                suma += d;
-            }
-            double mitjana = suma / dades.length;
-            
-            // Càlcul de la variància
-            double sumaDiferenciesQuadrat = 0;
-            for (double d : dades) {
-                sumaDiferenciesQuadrat += Math.pow(d - mitjana, 2);
-            }
-            double variancia = sumaDiferenciesQuadrat / dades.length;
-            
-            // La desviació estàndard és la arrel quadrada de la variància
-            resultatDesviacio = Math.sqrt(variancia);
-            System.out.println("[" + Thread.currentThread().getName() + "] Desviació calculada. Esperant a la barrera...");
-            
-            try {
-                barrera.await(); // El fil es queda aquí fins que els altres 2 arribin
-            } catch (Exception e) {
-                System.err.println("Error a la barrera: " + e.getMessage());
-            }
-        };
-
-        // MOTOR D'EXECUCIÓ (POOL DE FILS)
-        // Creem un pool de fils fix per executar les 3 tasques en paral·lel
-        ExecutorService executor = Executors.newFixedThreadPool(3);
-
-        // Enviem les tasques a l'executor per a la seva execució simultània
-        executor.execute(tascaSuma);
-        executor.execute(tascaMitjana);
-        executor.execute(tascaDesviacio);
-
-        // TANCAMENT CONTROLAT DE L'EXECUTOR
-        // Tanquem l'executor perquè no accepti més tasques i alliberi la memòria
+        // CIERRE CONTROLADO DEL EXECUTOR
+        // Apagamos el administrador de hilos para que no admita nuevas peticiones
         executor.shutdown();
         try {
-            // Esperem un màxim de 5 segons a que tots els fils hagin creuat la barrera i acabat
-            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+            // Damos un margen de 15 segundos para que todos los coches terminen de salir
+            if (!executor.awaitTermination(15, TimeUnit.SECONDS)) {
                 executor.shutdownNow();
             }
+            System.out.println("\n[SISTEMA] Aparcamiento cerrado y recursos liberados.");
         } catch (InterruptedException e) {
             executor.shutdownNow();
+        }
+    }
+
+    // =======================================================================
+    // CLASE INTERNA PARKINGLOT
+    // Gestiona de manera segura y concurrente el acceso mediante un Semaphore
+    // =======================================================================
+    static class ParkingLot {
+        // El semáforo controlará que no se supere la capacidad máxima establecida
+        private final Semaphore semafor;
+
+        public ParkingLot(int capacitat) {
+            // Inicializamos el semáforo con los permisos equivalentes a las plazas totales
+            // El parámetro 'true' garantiza equidad (Fairness): los coches entran por orden de llegada
+            this.semafor = new Semaphore(capacitat, true);
+        }
+
+        // Método para gestionar la entrada de un coche
+        public void entrar(int cocheId) throws InterruptedException {
+            // Comprobamos de manera no bloqueante si hay plazas libres antes de adquirir el permiso
+            // Sirve únicamente para lanzar el mensaje informativo de que el coche se queda esperando
+            if (semafor.availablePermits() == 0) {
+                System.out.println("❌ [Cotxe " + cocheId + "] L'aparcament està plen. S'espera a la cua...");
+            }
+
+            // El hilo intenta adquirir un permiso. Si no hay, se congela aquí de forma segura
+            semafor.acquire();
+            
+            // Si pasa de esta línea, significa que ha conseguido plaza con éxito
+            System.out.println("🚗 [Cotxe " + cocheId + "] Ha entrat correctament. Places lliures: " + semafor.availablePermits());
+        }
+
+        // Método para gestionar la salida de un coche
+        public void sortir(int cocheId) {
+            // Devolvemos el permiso al semáforo, incrementando el contador de plazas libres
+            semafor.release();
+            System.out.println("💨 [Cotxe " + cocheId + "] Ha sortit de l'aparcament. Places lliures: " + semafor.availablePermits());
         }
     }
 }
